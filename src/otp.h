@@ -23,6 +23,7 @@
 #define OTP_H
 
 #include <glib.h>
+#include <baseencode.h>
 
 /* Error domain */
 #define OTP_ERROR otp_error_quark ()
