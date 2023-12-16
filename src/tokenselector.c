@@ -224,11 +224,8 @@ delete_tokens ( GtkWidget *parent, TokenSelector *self )
 static void
 init_touch_selector ( TokenSelector *self )
 {
-  GtkTreeModel *model;
   gsize length, i;
   gchar **names;
-
-  model = hildon_touch_selector_get_model( self->selector, 0 );
 
   names = token_db_get_names ( self->token_db , &length );
   for ( i=0; i < length; ++i ) {

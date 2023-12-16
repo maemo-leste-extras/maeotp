@@ -57,7 +57,7 @@ main ()
     otp = token_hotp( token );
     ok = ( g_strcmp0 (otp, decimal_hotps[i] ) == 0 );
     if ( ! ok )
-      g_error ( "Error for counter %d: Expected '%s', got '%s'\n", i, decimal_hotps[i] );
+      g_error ( "Error for counter %d: Expected '%s', got '%s'\n", i, decimal_hotps[i], otp );
   }
 
   token_free ( token );
