@@ -8,6 +8,6 @@ Standards-Version: 4.2.0
 Package: maeotp
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: OTP Generator for N900
- OTP Generator for Maemo on the Nokia N900. Supports OATH tokens 
- (HOTP,TOTP) as well as the Mobile-OTP algorithm.
+Description: OTP Generator for Maemo
+ OTP Generator for Maemo. Supports OATH tokens (HOTP, TOTP) as well
+ as the Mobile-OTP algorithm.
