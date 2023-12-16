@@ -1,3 +1,10 @@
+maeotp (0.2.6-0) unstable; urgency=low
+
+  * Support direct input of base32 keys
+  * Update package description
+
+ -- Sicelo A. Mhlongo <absicsz@gmail.com>  Sat, 16 Dec 2023 13:13:19 +0200
+
 maeotp (0.2.5-0) unstable; urgency=low
 
   * Fix compilation error by using extern keyword
