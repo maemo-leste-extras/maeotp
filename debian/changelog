@@ -1,3 +1,10 @@
+maeotp (0.2.7-0) unstable; urgency=low
+
+  * Do not default to hex display for tokens
+  * Default to the more common TOTP method
+
+ -- Sicelo A. Mhlongo <absicsz@gmail.com>  Sat, 16 Dec 2023 20:29:36 +0200
+
 maeotp (0.2.6-0) unstable; urgency=low
 
   * Support direct input of base32 keys
