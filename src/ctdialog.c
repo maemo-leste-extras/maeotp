@@ -2,7 +2,7 @@
  * This file is part of the OTP Generator for N900.                             *
  *                                                                              *
  * OTP is a Hildon program thats generates one-time passwords. It supports      *
- * OAUTH tokens (HOTP, TOTP) as weel as the Mobile-OTP algorithms.              *
+ * OAUTH tokens (HOTP, TOTP) as well as the Mobile-OTP algorithms.              *
  * Copyright (C) 2011  Sean Whitbeck <sean@neush.net>                           *
  *                                                                              *
  * This program is free software: you can redistribute it and/or modify         *
@@ -35,7 +35,7 @@
 #define KEY_LABEL       "Key "
 
 #define DEFAULT_ALGORITHM HOTP
-#define DEFAULT_COUNTER_T EVENT
+#define DEFAULT_COUNTER_T TIME
 
 
 static GtkDialogClass *parent_class = NULL;
