@@ -29,7 +29,7 @@
 #define USER_CONFIG_DIR ".config"
 #define TOKEN_DB_FILE_NAME "tokens"
 
-#define DEFAULT_DISP_HEX TRUE
+#define DEFAULT_DISP_HEX FALSE
 #define DEFAULT_DIGITS 6
 #define DEFAULT_COUNTER 0
 #define DEFAULT_PIN_SIZE 4
