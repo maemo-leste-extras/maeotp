@@ -45,7 +45,6 @@ struct _EtDialog
 
   GtkWidget *key;
   GtkWidget *description;
-  GtkWidget *disp_hex;
   GtkWidget *pin_size;
   GtkWidget *digits;
   GtkWidget *counter;

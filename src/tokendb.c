@@ -27,7 +27,6 @@
 #define KEY_KEY        "key"
 #define KEY_ALGORITHM  "algorithm"
 #define KEY_COUNTER_T  "counter type"
-#define KEY_DISP_HEX   "display hex"
 #define KEY_DIGITS     "digits"
 #define KEY_COUNTER    "counter value"
 #define KEY_INTERVAL   "interval"
@@ -173,7 +172,6 @@ token_db_add_token ( TokenDB *self, Token *token )
 	case TIME: SET_INTEGER ( KEY_INTERVAL, token->interval ); break;
 	default:;
 	}
-      SET_BOOLEAN ( KEY_DISP_HEX, token->disp_hex );
       SET_INTEGER ( KEY_DIGITS, token->digits );
       break;
       
@@ -263,7 +261,6 @@ token_db_get_token ( TokenDB *self, const gchar *name, GError **err )
 	default:;
 	}
       /* optional parameters */
-      SET_OPT_VALUE ( KEY_DISP_HEX, token_set_disp_hex );
       SET_OPT_VALUE ( KEY_DIGITS, token_set_digits );
       break;
 

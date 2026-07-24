@@ -50,7 +50,6 @@ main ()
   token_set_algorithm ( token, "HOTP", NULL );
   token_set_counter_type ( token, "event-based", NULL );
   token_set_key ( token, key, NULL );
-  token->disp_hex = FALSE;
 
   for ( i=0; i<10; ++i ){
     token->counter = i;

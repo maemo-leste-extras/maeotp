@@ -74,13 +74,6 @@ main ()
   token_set_interval ( token, "50", &err );
   ASSERT_NO_ERROR;
 
-  token_set_disp_hex ( token, "oh yes", &err );
-  ASSERT_ERROR;
-  token_set_disp_hex ( token, "falSe", &err );
-  ASSERT_NO_ERROR;
-  token_set_disp_hex ( token, "Yes", &err );
-  ASSERT_NO_ERROR;
-
   token_set_digits ( token, g_strdup_printf("%d", MAX_DIGITS+1), &err );
   ASSERT_ERROR;
   token_set_digits ( token, g_strdup_printf("%d", MIN_DIGITS-1), &err );

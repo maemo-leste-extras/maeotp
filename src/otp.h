@@ -23,7 +23,6 @@
 #define OTP_H
 
 #include <glib.h>
-#include "base32.h"
 
 /* Error domain */
 #define OTP_ERROR otp_error_quark ()
@@ -56,6 +55,7 @@ typedef enum {
 typedef enum {
   HEX,
   ASCII,
+  BASE32,
   N_OTP_KEY_TYPES
 } KeyType;
 
@@ -79,7 +79,6 @@ typedef struct {
 
   guint pin_size; // MOTP specific
 
-  gboolean disp_hex; // HOTP specific
   guint digits; // HOTP specific
   
   /* Execution-time variables */
@@ -104,7 +103,6 @@ void token_set_algorithm ( Token *token, const gchar *str, GError **err );
 void token_set_counter_type ( Token *token, const gchar *str, GError **err );
 void token_set_counter ( Token *token, const gchar *str, GError **err );
 void token_set_interval ( Token *token, const gchar *str, GError **err );
-void token_set_disp_hex ( Token *token, const gchar *str, GError **err );
 void token_set_digits ( Token *token,  const gchar *str, GError **err );
 void token_set_pin_size ( Token *token,  const gchar *str, GError **err );
 void token_set_pin ( Token *token,  const gchar *str, GError **err );
@@ -115,7 +113,5 @@ const gchar* token_get_counter_as_str ( Token *token );
 const guint8* token_key_new ( Algorithm algorithm, guint *length );
 const gchar* token_key_new_as_str ( Algorithm algorithm );
 guint64 token_epoch ( Token *token );
-gboolean token_key_cmp ( const guint8 *key1, guint l1, const guint8 *key2, guint l2 );
-void hmac_sha1 ( guint8 *hmac, const guint8 *key, guint lk, const guint8 *data, guint ld );
 
 #endif

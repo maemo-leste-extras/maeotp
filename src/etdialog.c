@@ -75,7 +75,6 @@ et_dialog_init ( EtDialog *self )
   //			    HILDON_GTK_INPUT_MODE_HEXA );
 
   /* initialize the rest to NULL */
-  self->disp_hex = NULL;
   self->counter = NULL;
   self->interval = NULL;
   self->pin_size = NULL;
@@ -165,11 +164,6 @@ et_dialog_new ( GtkWindow *parent, Token *token )
 
 	default:;
 	}
-      /* disp hex */
-      self->disp_hex = hildon_check_button_new ( HILDON_SIZE_FINGER_HEIGHT );
-      gtk_button_set_label ( GTK_BUTTON ( self->disp_hex ), "Display Hexadecimal" );
-      hildon_check_button_set_active ( HILDON_CHECK_BUTTON(self->disp_hex), token->disp_hex );
-      APPEND ( self->disp_hex );
       /* Digits */
       self->digits = integer_selector_new ( MIN_DIGITS, MAX_DIGITS );
       hildon_button_set_title ( HILDON_BUTTON(self->digits), "Digits" );
@@ -216,7 +210,6 @@ return_if_ok ( GtkWidget *widget, EtDialog *self )
 {
   Token *token;
   const gchar *text;
-  gboolean disp_hex;
   GError *err;
   guint pin_size, digits;
 
@@ -244,12 +237,6 @@ return_if_ok ( GtkWidget *widget, EtDialog *self )
     digits = hildon_picker_button_get_active ( HILDON_PICKER_BUTTON(self->digits) );
     digits += MIN_DIGITS; // values start at MIN_DIGITS not 0
     token->digits = digits;
-  }
-
-  /* Display hex */
-  if ( self->disp_hex ){
-    disp_hex = hildon_check_button_get_active ( HILDON_CHECK_BUTTON(self->disp_hex) );
-    token->disp_hex = disp_hex;
   }
 
   /* update pin size */

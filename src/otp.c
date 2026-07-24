@@ -29,8 +29,7 @@
 #include "strconv.h"
 #include "config.h"
 
-#define SHA_DIGESTSIZE 20
-#define SHA_BLOCKSIZE 64
+#include <cotp.h>
 
 
 /* Error quarks */
@@ -58,7 +57,6 @@ token_new ( const gchar *name )
   token->pin = NULL;
   token->pin_size = DEFAULT_PIN_SIZE;
   token->digits = DEFAULT_DIGITS;
-  token->disp_hex = DEFAULT_DISP_HEX;
   token->modified = FALSE;
   return token;
 }
@@ -108,14 +106,34 @@ token_key_new ( Algorithm algorithm, guint *length )
 const gchar*
 token_key_new_as_str ( Algorithm algorithm )
 {
-  const guint8 *hex_key;
+  const guint8 *raw_key;
   const gchar *str_key;
   guint l;
+  cotp_error_t err;
+  char *b32;
 
-  hex_key = token_key_new ( algorithm, &l );
-  str_key = hex_keytostr ( hex_key, l );
-  
-  g_free ( (gpointer)hex_key );
+  raw_key = token_key_new ( algorithm, &l );
+
+  switch ( algorithm )
+    {
+    case HOTP:
+      err = NO_ERROR;
+      b32 = base32_encode ( raw_key, l, &err );
+      if ( b32 && err == NO_ERROR ) {
+        str_key = g_strdup ( b32 );
+        free ( b32 );
+      } else {
+        /* fallback: hex (should not happen) */
+        str_key = hex_keytostr ( raw_key, l );
+      }
+      g_free ( (gpointer)raw_key );
+      break;
+    case MOTP:
+    default:
+      str_key = hex_keytostr ( raw_key, l );
+      g_free ( (gpointer)raw_key );
+      break;
+    }
 
   return str_key;
 }
@@ -170,124 +188,25 @@ token_motp ( Token *token )
 const gchar*
 token_hotp ( Token *token )
 {
-  guint8 C[8];
-  gint i, lk, ld;
-  guint64 counter;
-  guint8 hmac[SHA_DIGESTSIZE];
   const gchar *otp;
-  guint8 *buffer;
-  guint32 mask;
-  guint64 modulo;
-  guint32 offset, value;
+  const gchar *b32_secret;
+  gchar *result;
+  cotp_error_t err;
 
-  /* Encode counter */
-  counter = token->counter;
-  ld = sizeof(C);
-  for ( i=ld-1; i >= 0; --i ){
-    C[i] = counter & 0xff;
-    counter >>= 8;
+  /* HOTP keys are stored as base32-encoded strings (see token_set_key).
+     libcotp expects the secret in base32 form. */
+  b32_secret = (const gchar*) token->key;
+
+  err = NO_ERROR;
+  result = get_hotp ( b32_secret, (long) token->counter, token->digits, SHA1, &err );
+  if ( result == NULL || err != NO_ERROR ) {
+    if ( result ) free ( result );
+    return g_strdup ( "" );
   }
-  
-  lk = token->key_l;
 
-  /* Compute HMAC-SHA1 */
-  hmac_sha1 ( hmac, token->key, lk, C, ld );
-
-  /* Truncate to extract a 31 bit integer value */
-  offset = hmac[SHA_DIGESTSIZE - 1] & 0x0f;
-  value = ((hmac[offset] & 0x7f) << 24) | ((hmac[offset + 1] & 0xff) << 16)
-    | ((hmac[offset + 2] & 0xff) << 8) | (hmac[offset + 3] & 0xff);
-
-  /* create the otp */
-  buffer = g_malloc ( sizeof(guint8) * ( token->digits + 1 ) ); // add an extra char for the null character
-  if ( token->disp_hex ){ /* return hexadecimal */
-    mask = ( token->digits < 8 ) ? ((1 << (4 * token->digits)) - 1) : -1 ;
-    g_snprintf ( (gchar*)buffer, token->digits+1, "%0*x", token->digits, value & mask );
-  } else { /* return decimal */ 
-    modulo = 1;
-    for ( i = 0; i < token->digits; ++i ) modulo *= 10;
-    g_snprintf ( (gchar*)buffer, token->digits+1, "%0*u", token->digits, (guint)(value % modulo) );
-  }
-  buffer[token->digits] = '\0';
-
-  otp = (gchar*)buffer;
+  otp = g_strdup ( result );
+  free ( result );
   return otp;
-}
-
-
-void
-hmac_sha1 ( guint8 *hmac, const guint8 *key, guint lk, const guint8 *data, guint ld )
-{
-  GChecksum *sha1;
-  guint i;
-  gsize dl;
-  guint8 k_buf[SHA_DIGESTSIZE];
-  guint8 buf[SHA_BLOCKSIZE];
-  guint8 isha[SHA_DIGESTSIZE];
-  const guint8 *k;
-
-
-  sha1 = g_checksum_new ( G_CHECKSUM_SHA1 );
-
-  /* make sure key isn't too long */
-  if ( lk > SHA_BLOCKSIZE ) {
-    g_checksum_reset ( sha1 );
-    g_checksum_update ( sha1, key, lk );
-    dl = SHA_DIGESTSIZE;
-    g_checksum_get_digest ( sha1, k_buf, &dl);
-    lk = SHA_DIGESTSIZE;
-    k = k_buf;
-  } else {
-    k = key;
-  }
-
-  /**** Inner digest ****/
-
-  g_checksum_reset ( sha1 );
-
-   /* Pad the key for inner digest */
-  for ( i=0; i < lk; ++i ) buf[i] = k[i] ^ 0x36;
-  for ( i=lk; i < SHA_BLOCKSIZE; ++i ) buf[i] = 0x36;
-
-  g_checksum_update ( sha1, buf, SHA_BLOCKSIZE );
-  g_checksum_update ( sha1, data, ld );
-  dl = SHA_DIGESTSIZE;
-  g_checksum_get_digest ( sha1, isha, &dl);
-
-  /**** Outer digest ****/
-
-  g_checksum_reset ( sha1 );
-
-  /* Pad the key for outer digest */
-  for ( i=0; i < lk; ++i ) buf[i] = k[i] ^ 0x5C;
-  for ( i=lk; i < SHA_BLOCKSIZE; ++i ) buf[i] = 0x5C;
-
-  g_checksum_update ( sha1, buf, SHA_BLOCKSIZE );
-  g_checksum_update ( sha1, isha, SHA_DIGESTSIZE );
-
-  /* copy over the final result */
-  dl = SHA_DIGESTSIZE;
-  g_checksum_get_digest ( sha1, hmac, &dl);
-
-   /* cleanup */
-  g_checksum_free ( sha1 );
-  
-}
-
-
-gboolean
-token_key_cmp ( const guint8 *key1, guint l1, const guint8 *key2, guint l2 )
-{
-  guint i;
-
-  if ( l1 != l2 )
-    return FALSE;
-
-  for ( i=0; i<l1; ++i)
-    if ( key1[i] != key2[i] )
-      return FALSE;
-  
-  return TRUE;
 }
 
 
@@ -299,55 +218,83 @@ token_epoch ( Token *token )
   return 0;
 }
 
-void 
+void
 token_set_key ( Token *token, const gchar *str, GError **err )
 {
-  GError *lerr;
   const guint8 *key;
   KeyType key_t;
   guint key_l;
-
-  base32_error_t berr;
-  gchar* base32_hex = NULL;
+  gchar *str_up;
+  cotp_error_t berr;
+  gchar *b32;
+  const guint8 *raw;
+  guint raw_l;
+  GError *lerr;
 
   key_l = 0;
   key = NULL;
   key_t = 0;
-  
+
   switch ( token->algorithm )
     {
-    case HOTP: /* HOTP passwords can be base32, binary or ascii */
-
-      /* Check if it is base32 encoded, if it is, use the hex path */
-      base32_hex = base32_decode_to_hex(str, strlen(str), &berr);
-      if (berr == BASE32_SUCCESS) {
-        lerr = NULL;
-        key_t = HEX;
-        key = hex_strtokey ( base32_hex, &key_l, &lerr );
-        g_free(base32_hex);
-
-        if ( !lerr ){ /* otherwise, try path below */
+    case HOTP: /* HOTP keys are stored as base32-encoded strings */
+      if ( str && *str ) {
+        /* libcotp's is_string_valid_b32 only accepts uppercase base32,
+           so check an uppercased copy */
+        str_up = g_ascii_strup ( str, -1 );
+        if ( is_string_valid_b32 ( str_up ) ) {
+          /* input is already base32-encoded; store as-is */
+          g_free ( str_up );
+          key = (guint8*) g_strdup ( str );
+          key_l = strlen ( str );
+          key_t = BASE32;
           break;
         }
+        g_free ( str_up );
       }
-      /* first try to interpret as a hex string */
+
+      /* try to interpret as a hex string */
       lerr = NULL;
-      key_t = HEX;
-      key = hex_strtokey ( str, &key_l, &lerr );
-      if ( lerr ){ /* otherwise, use key as raw ascii */
-	g_error_free ( lerr );
-	key = (guint8*)g_strdup ( str );
-	key_l = strlen ( str );
-	key_t = ASCII;
+      raw = hex_strtokey ( str, &raw_l, &lerr );
+      if ( !lerr ) {
+        /* encode the raw key bytes as base32 */
+        berr = NO_ERROR;
+        b32 = base32_encode ( raw, raw_l, &berr );
+        g_free ( (gpointer)raw );
+        if ( b32 && berr == NO_ERROR ) {
+          key = (guint8*) g_strdup ( b32 );
+          key_l = strlen ( b32 );
+          key_t = BASE32;
+          free ( b32 );
+          break;
+        }
+        if ( b32 ) free ( b32 );
+      } else {
+        g_error_free ( lerr );
+      }
+
+      /* otherwise, use key as raw ascii: base32-encode the bytes */
+      berr = NO_ERROR;
+      b32 = base32_encode ( (const guint8*) str, strlen ( str ), &berr );
+      if ( b32 && berr == NO_ERROR ) {
+        key = (guint8*) g_strdup ( b32 );
+        key_l = strlen ( b32 );
+        key_t = BASE32;
+        free ( b32 );
+      } else {
+        g_set_error ( err, OTP_ERROR, OTP_ERROR_INVALID_TOKEN,
+                      "Could not encode key" );
+        if ( b32 ) free ( b32 );
+        return;
       }
       break;
 
     case MOTP: /* MOTP passwords are always ascii */
-      key = (guint8*)g_strdup ( str );
+      key = (guint8*) g_strdup ( str );
       key_l = strlen ( str );
       key_t = ASCII;
       break;
-      
+
     default:;
     }
 
@@ -465,34 +412,6 @@ token_set_counter ( Token *token, const gchar *str, GError **err )
 }
 
 
-void 
-token_set_disp_hex ( Token *token, const gchar *str, GError **err )
-{
-  guint i;
-  gchar *str_lower;
-
-  const static gchar *OK[] = { "true", "yes", "1" };
-  const static gchar *NOK[] = { "false", "no", "0" };
-
-  for ( i=0; i<3; ++i ){
-    str_lower = g_ascii_strdown ( str, -1 );
-    if ( ( g_strcmp0 ( str_lower, OK[i] ) ) == 0 ){
-      token->disp_hex = TRUE;
-      return;
-    }
-  }
-  for ( i=0; i<3; ++i ){
-    str_lower = g_ascii_strdown ( str, -1 );
-    if ( ( g_strcmp0 ( str_lower, NOK[i] ) ) == 0 ){
-      token->disp_hex = FALSE;
-      return;
-    }
-  }
-  g_set_error ( err, OTP_ERROR, OTP_ERROR_INVALID_TOKEN,
-		"'%s' is not a valid boolean", str );
-}
-
-
 void
 token_set_digits ( Token *token,  const gchar *str, GError **err )
 {
@@ -555,6 +474,7 @@ token_get_key_as_str ( Token *token )
 {
   if ( token->key_t == HEX )
     return hex_keytostr ( token->key, token->key_l );
+  /* BASE32 and ASCII keys are stored as their string form */
   return g_strdup ( (gchar*)token->key );
 }
 
