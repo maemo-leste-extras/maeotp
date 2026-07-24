@@ -1,1 +1,1 @@
-noinst_HEADERS = README.Debian changelog compat control copyright dirs rules
+noinst_HEADERS = README.Debian changelog control copyright dirs rules
