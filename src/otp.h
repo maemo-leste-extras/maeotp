@@ -62,6 +62,7 @@ typedef enum {
 
 extern const gchar* algorithm_labels[N_OTP_ALGORITHMS];
 extern const gchar* counter_type_labels[N_OTP_COUNTER_TYPES];
+extern const gchar* key_type_labels[N_OTP_KEY_TYPES];
 
 
 /* OTP Tokens */

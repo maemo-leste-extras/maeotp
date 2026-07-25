@@ -1,3 +1,18 @@
+maeotp (0.3.1-0) unstable; urgency=medium
+
+  * Provide migration path for HOTP/TOTP keys stored in the pre-0.3.0
+    format (hex or ASCII) to the base32 storage used by libcotp
+  * Persist a per-token "key type" marker in the tokens DB so stored
+    keys are interpreted unambiguously on load, rather than guessed
+    by the input heuristic
+  * Migrate old-format keys on first load (token_db_migrate_keys):
+    hex -> raw bytes -> base32, ASCII -> raw bytes -> base32 for HOTP;
+    tag MOTP keys as ASCII. Rewritten DB is saved automatically
+  * Add test_migrate covering hex, hex-that-looks-like-base32, and
+    ASCII (MOTP) old-format keys, plus DB save/reload round-trip
+
+ -- Sicelo A. Mhlongo <absicsz@gmail.com>  Fri, 25 Jul 2025 00:00:00 +0000
+
 maeotp (0.3.0-0) unstable; urgency=medium
 
   * Switch to libcotp for HOTP/TOTP (RFC 4226/6238) and base32

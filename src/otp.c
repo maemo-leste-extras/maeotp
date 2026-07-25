@@ -43,6 +43,7 @@ otp_error_quark ( void )
 /* Labels */
 const gchar* algorithm_labels[] = { "HOTP", "MOTP" };
 const gchar* counter_type_labels[] = { "event-based", "time-based" };
+const gchar* key_type_labels[] = { "hex", "ascii", "base32" };
 
 
 /* Tokens */
@@ -118,7 +119,16 @@ token_key_new_as_str ( Algorithm algorithm )
     {
     case HOTP:
       err = NO_ERROR;
-      b32 = base32_encode ( raw_key, l, &err );
+      /* libcotp's base32_encode reads its input via strlen, so the
+         raw buffer must be NUL-terminated. token_key_new allocates
+         exactly l bytes with no terminator. */
+      {
+        guint8 *rk = g_malloc ( l + 1 );
+        memcpy ( rk, raw_key, l );
+        rk[l] = 0;
+        b32 = base32_encode ( rk, l, &err );
+        g_free ( rk );
+      }
       if ( b32 && err == NO_ERROR ) {
         str_key = g_strdup ( b32 );
         free ( b32 );
@@ -257,10 +267,16 @@ token_set_key ( Token *token, const gchar *str, GError **err )
       lerr = NULL;
       raw = hex_strtokey ( str, &raw_l, &lerr );
       if ( !lerr ) {
-        /* encode the raw key bytes as base32 */
-        berr = NO_ERROR;
-        b32 = base32_encode ( raw, raw_l, &berr );
+        /* encode the raw key bytes as base32. libcotp's base32_encode
+           reads its input via strlen, so NUL-terminate the raw buffer
+           (hex_strtokey allocates exactly raw_l bytes). */
+        guint8 *raw_z = g_malloc ( raw_l + 1 );
+        memcpy ( raw_z, raw, raw_l );
+        raw_z[raw_l] = 0;
         g_free ( (gpointer)raw );
+        berr = NO_ERROR;
+        b32 = base32_encode ( raw_z, raw_l, &berr );
+        g_free ( raw_z );
         if ( b32 && berr == NO_ERROR ) {
           key = (guint8*) g_strdup ( b32 );
           key_l = strlen ( b32 );

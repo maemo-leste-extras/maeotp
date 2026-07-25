@@ -1,4 +1,4 @@
-AC_INIT([maeotp], [0.3.0])
+AC_INIT([maeotp], [0.3.1])
 AM_INIT_AUTOMAKE([foreign])
 AC_PROG_CC
 PKG_CHECK_MODULES([HILDON], [hildon-1 >= 2.2])

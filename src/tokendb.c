@@ -21,8 +21,11 @@
 
 
 #include <glib/gstdio.h>
+#include <string.h>
+#include <cotp.h>
 #include "config.h"
 #include "tokendb.h"
+#include "strconv.h"
 
 #define KEY_KEY        "key"
 #define KEY_ALGORITHM  "algorithm"
@@ -31,7 +34,10 @@
 #define KEY_COUNTER    "counter value"
 #define KEY_INTERVAL   "interval"
 #define KEY_PIN_SIZE   "pin size"
+#define KEY_KEY_TYPE   "key type"
 
+
+static void token_db_migrate_keys ( TokenDB *self );
 
 #define TOKEN_DB_FILE_TITLE "# OTP tokens"
 
@@ -91,13 +97,19 @@ token_db_new ( GError **err )
 	default : 
 	  g_propagate_error ( err, tmp_err );
       };
+    } else {
+      /* Migrate old-format keys (pre-0.3.0) to the base32 storage
+	 used by libcotp. Sets self->modified if any token was rewritten,
+	 so the upgraded file is persisted on the next token_db_save. */
+      token_db_migrate_keys ( self );
     }
   }
   
-  /* Clean up temporary strings */
+  /* Clean up temporary strings. home_dir is owned by GLib (returned
+     by g_get_home_dir) and must not be freed; freeing it would cause
+     a use-after-free on the next token_db_new in the same process. */
   g_free ( (gpointer)dot_config_dir );
   g_free ( (gpointer)app_config_dir );
-  g_free ( (gpointer)home_dir );
 
   return self;
 }
@@ -157,6 +169,7 @@ token_db_add_token ( TokenDB *self, Token *token )
 {
   /* key */
   SET_STRING ( KEY_KEY, token_get_key_as_str ( token ) );
+  SET_STRING ( KEY_KEY_TYPE, key_type_labels[token->key_t] );
 
   /* algorithm and counter type */
   SET_STRING ( KEY_ALGORITHM, algorithm_labels[token->algorithm] );
@@ -247,7 +260,40 @@ token_db_get_token ( TokenDB *self, const gchar *name, GError **err )
   SET_REQ_VALUE ( KEY_COUNTER_T, token_set_counter_type );
 
   /* read key */
-  SET_REQ_VALUE ( KEY_KEY, token_set_key );
+  buffer = g_key_file_get_value ( self->key_file, name, KEY_KEY_TYPE, &lerr );
+  if ( lerr ) {
+    /* legacy entry without a key type marker: fall back to the
+       input heuristic in token_set_key, which accepts base32, hex,
+       or ASCII input for HOTP and ASCII for MOTP. */
+    g_error_free ( lerr );
+    lerr = NULL;
+    SET_REQ_VALUE ( KEY_KEY, token_set_key );
+  } else {
+    /* new format: trust the stored key type and assign the key
+       directly, without re-running the input heuristic. */
+    KeyType kt;
+    if ( g_strcmp0 ( buffer, "base32" ) == 0 )
+      kt = BASE32;
+    else if ( g_strcmp0 ( buffer, "ascii" ) == 0 )
+      kt = ASCII;
+    else if ( g_strcmp0 ( buffer, "hex" ) == 0 )
+      kt = HEX;
+    else
+      kt = BASE32; /* sensible default for HOTP */
+    g_free ( buffer );
+
+    lerr = NULL;
+    buffer = g_key_file_get_value ( self->key_file, name, KEY_KEY, &lerr );
+    if ( lerr ) {
+      g_propagate_error ( err, lerr );
+      goto err;
+    }
+    token->key = (guint8*) g_strdup ( buffer );
+    token->key_l = strlen ( buffer );
+    token->key_t = kt;
+    g_free ( buffer );
+    buffer = NULL;
+  }
 
   /* Read algorithm-specific params */
   switch ( token->algorithm )
@@ -289,5 +335,114 @@ gchar**
 token_db_get_names ( TokenDB *self, gsize *length )
 {
   return g_key_file_get_groups ( self->key_file, length );
+}
+
+
+/* Migrate old-format (pre-0.3.0) keys to the base32 storage used by
+   libcotp.
+
+   Before 0.3.0, HOTP keys were stored either as a hexadecimal string
+   (the normal case: both hex input and base32 input were decoded to
+   raw bytes and re-hex'd) or as a raw ASCII passphrase (the fallback
+   when input was neither valid hex nor valid base32). MOTP keys were
+   always stored as raw ASCII.
+
+   0.3.0 stores HOTP keys as base32 strings, so on load token_set_key
+   would misclassify an old hex key that happens to also be a valid
+   base32 string (e.g. one composed only of the characters
+   {a,b,c,d,e,f,2,3,4,5,6,7}), silently producing wrong OTPs.
+
+   This pass runs once on load: for every token lacking a "key type"
+   marker, it re-encodes HOTP keys to base32 (hex -> raw -> base32,
+   or ASCII -> raw -> base32) and tags every token with its key type.
+   It sets self->modified so the upgraded file is written back. */
+static void
+token_db_migrate_keys ( TokenDB *self )
+{
+  gchar **names;
+  gsize n, i;
+  gchar *kt_value, *alg_value, *old_key, *b32;
+  const guint8 *raw;
+  guint raw_l;
+  GError *lerr;
+  cotp_error_t berr;
+
+  names = token_db_get_names ( self, &n );
+
+  for ( i = 0; i < n; ++i ) {
+    /* Skip tokens that already record a key type (new format). */
+    lerr = NULL;
+    kt_value = g_key_file_get_value ( self->key_file, names[i],
+                                      KEY_KEY_TYPE, &lerr );
+    if ( kt_value ) {
+      g_free ( kt_value );
+      if ( lerr ) g_error_free ( lerr );
+      continue;
+    }
+    if ( lerr ) g_error_free ( lerr );
+
+    lerr = NULL;
+    alg_value = g_key_file_get_value ( self->key_file, names[i],
+                                       KEY_ALGORITHM, &lerr );
+    if ( alg_value == NULL ) {
+      if ( lerr ) g_error_free ( lerr );
+      continue;
+    }
+
+    lerr = NULL;
+    old_key = g_key_file_get_value ( self->key_file, names[i],
+                                     KEY_KEY, &lerr );
+    if ( old_key == NULL ) {
+      if ( lerr ) g_error_free ( lerr );
+      g_free ( alg_value );
+      continue;
+    }
+
+    if ( g_strcmp0 ( alg_value, algorithm_labels[HOTP] ) == 0 ) {
+      /* Old-format HOTP keys were stored as hex or raw ASCII.
+         Re-encode both to base32. */
+      lerr = NULL;
+      raw = hex_strtokey ( old_key, &raw_l, &lerr );
+      if ( !lerr ) {
+        /* hex string -> raw bytes -> base32. libcotp's base32_encode
+           reads its input via strlen, so NUL-terminate the raw buffer
+           (hex_strtokey allocates exactly raw_l bytes). */
+        guint8 *raw_z = g_malloc ( raw_l + 1 );
+        memcpy ( raw_z, raw, raw_l );
+        raw_z[raw_l] = 0;
+        g_free ( (gpointer)raw );
+        berr = NO_ERROR;
+        b32 = base32_encode ( raw_z, raw_l, &berr );
+        g_free ( raw_z );
+      } else {
+        /* not hex: treat the stored string as raw ASCII bytes */
+        g_error_free ( lerr );
+        berr = NO_ERROR;
+        b32 = base32_encode ( (const guint8*)old_key, strlen ( old_key ), &berr );
+      }
+
+      if ( b32 && berr == NO_ERROR ) {
+        g_key_file_set_value ( self->key_file, names[i], KEY_KEY, b32 );
+        g_key_file_set_value ( self->key_file, names[i],
+                               KEY_KEY_TYPE, key_type_labels[BASE32] );
+        self->modified = TRUE;
+        free ( b32 );
+      } else {
+        /* Leave the key untouched; token_set_key will attempt its
+           own conversion when the token is read. */
+        if ( b32 ) free ( b32 );
+      }
+    } else {
+      /* MOTP keys are stored as ASCII; just tag them. */
+      g_key_file_set_value ( self->key_file, names[i],
+                             KEY_KEY_TYPE, key_type_labels[ASCII] );
+      self->modified = TRUE;
+    }
+
+    g_free ( alg_value );
+    g_free ( old_key );
+  }
+
+  g_strfreev ( names );
 }
 

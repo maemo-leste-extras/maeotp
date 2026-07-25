@@ -14,7 +14,7 @@ noinst_HEADERS = tokenselector.h tokenview.h \
 
 
 # TESTS
-check_PROGRAMS = test_hotp test_motp test_errors
+check_PROGRAMS = test_hotp test_motp test_errors test_migrate
 
 test_hotp_CPPFLAGS = $(HILDON_CFLAGS) $(COTP_CFLAGS)
 test_hotp_LDADD = $(HILDON_LIBS) $(COTP_LIBS)
@@ -27,6 +27,10 @@ test_motp_SOURCES = test_motp.c otp.c strconv.c
 test_errors_CPPFLAGS = $(HILDON_CFLAGS) $(COTP_CFLAGS)
 test_errors_LDADD = $(HILDON_LIBS) $(COTP_LIBS)
 test_errors_SOURCES = test_errors.c otp.c strconv.c
+
+test_migrate_CPPFLAGS = $(HILDON_CFLAGS) $(COTP_CFLAGS)
+test_migrate_LDADD = $(HILDON_LIBS) $(COTP_LIBS)
+test_migrate_SOURCES = test_migrate.c tokendb.c otp.c strconv.c
 
 
 TESTS = $(check_PROGRAMS)
